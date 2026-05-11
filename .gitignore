@@ -1,0 +1,10 @@
+model/
+*.safetensors
+
+train.csv
+processed.csv
+
+__pycache__/
+*.pyc
+
+confusion_matrix.png
