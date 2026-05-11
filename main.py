@@ -1,15 +1,15 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification
+    BertTokenizer,
+    BertForSequenceClassification
 )
 
 import torch
 import re
 
 from rapidfuzz import fuzz
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 from langdetect import detect
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,11 +33,11 @@ app.add_middleware(
 # =========================
 # Translator
 # =========================
-translator = Translator()
+
 
 @app.get("/")
 def home():
-    return {"status": "API Running"}
+    return {"status": "running"}
 
 # =========================
 # Safe Context
@@ -156,12 +156,12 @@ def translate_to_english(text):
 
     try:
 
-        translated = translator.translate(
-            text,
-            dest="en"
-        )
+        translated = GoogleTranslator(
+            source='auto',
+            target='en'
+        ).translate(text)
 
-        return translated.text.lower()
+        return translated.lower()
 
     except Exception as e:
 
@@ -323,15 +323,36 @@ def severity_score(text):
 # =========================
 # Load Model
 # =========================
-tokenizer = AutoTokenizer.from_pretrained(
-    "model"
-)
+tokenizer = None
 
-model = AutoModelForSequenceClassification.from_pretrained(
-    "model"
-)
+model = None
 
-model.eval()
+torch.set_num_threads(1)
+
+def load_model():
+
+    global tokenizer
+    global model
+
+    if tokenizer is None or model is None:
+
+        print("Loading lightweight model...")
+
+        tokenizer = BertTokenizer.from_pretrained(
+            "rakeshkrd/bert-threat-detection"
+        )
+
+        model = BertForSequenceClassification.from_pretrained(
+            "rakeshkrd/bert-threat-detection",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True
+        )
+
+        model.eval()
+
+        print("Model loaded.")
+
+
 
 # =========================
 # Input Schema
@@ -340,10 +361,11 @@ class InputText(BaseModel):
     text: str
 
 # =========================
+
 # Prediction Function
 # =========================
 def predict_model(text):
-
+    load_model()
     inputs = tokenizer(
         text,
         return_tensors="pt",
@@ -377,22 +399,69 @@ def predict_model(text):
 # API Endpoint
 # =========================
 @app.post("/predict")
-def predict(data: InputText):
+async def predict(data: InputText):
 
-    original_text = data.text.strip()
+    try:
 
-    # =========================
-    # Ignore Empty
-    # =========================
-    if len(original_text) < 2:
+        original_text = data.text
+
+        # Translation
+        if is_english(original_text):
+            text = original_text.lower()
+        else:
+            text = translate_to_english(original_text)
+
+        print("Translated:", text)
+
+        # Safe Context
+        if is_safe_context(text):
+
+            return {
+                "prediction": "Normal",
+                "confidence": 0.95,
+                "severity": "Low",
+                "reason": "Detected gaming/sports context"
+            }
+
+        # Abuse Detection
+        if (
+            contains_abuse(text)
+            or fuzzy_abuse_check(text)
+        ):
+
+            return {
+                "prediction": "Abuse",
+                "confidence": 0.90,
+                "severity": "Medium",
+                "reason": "Abusive language detected"
+            }
+
+        # Model Prediction
+        pred, confidence = predict_model(text)
+
+        # Threat
+        if pred == 1:
+
+            return {
+                "prediction": "Threat",
+                "confidence": round(confidence, 3),
+                "severity": "High",
+                "reason": "Threat detected"
+            }
 
         return {
-            "input": original_text,
             "prediction": "Normal",
-            "confidence": 0.99,
+            "confidence": round(confidence, 3),
             "severity": "Low",
-            "source": "filter",
-            "reason": "Empty or invalid text"
+            "reason": "No harmful intent detected"
+        }
+
+    except Exception as e:
+
+        print("ERROR:", str(e))
+
+        return {
+            "error": str(e)
         }
 
     # =========================
