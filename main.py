@@ -5,23 +5,23 @@ from transformers import (
     BertForSequenceClassification
 )
 
-import torch
-import re
+from fastapi.middleware.cors import CORSMiddleware
 
 from rapidfuzz import fuzz
 from deep_translator import GoogleTranslator
 from langdetect import detect
 
-from fastapi.middleware.cors import CORSMiddleware
+import torch
+import re
 
-# =========================
+# =========================================
 # FastAPI
-# =========================
+# =========================================
 app = FastAPI()
 
-# =========================
+# =========================================
 # CORS
-# =========================
+# =========================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,96 +30,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# Translator
-# =========================
+# =========================================
+# Optimize CPU Usage
+# =========================================
+torch.set_num_threads(1)
 
-
+# =========================================
+# Home Route
+# =========================================
 @app.get("/")
 def home():
-    return {"status": "running"}
+    return {"status": "API Running"}
 
-# =========================
-# Safe Context
-# =========================
-safe_context = [
-    "game",
-    "match",
-    "pubg",
-    "free fire",
-    "cricket",
-    "football",
-    "chess",
-    "play",
-    "tournament",
-    "gaming",
-    "battle",
-    "competition",
-    "score"
-]
-
-# =========================
-# Safe Tone
-# =========================
-safe_tone = [
-    "😂",
-    "🤣",
-    "lol",
-    "haha",
-    "hehe",
-    "jk",
-    "❤️",
-    "🎉"
-]
-
-# =========================
-# Aggressive Emojis
-# =========================
-aggressive_emojis = [
-    "💀",
-    "🔪",
-    "😡",
-    "🤬",
-    "☠️",
-    "💣",
-    "🔥",
-    "👿"
-]
-
-# =========================
-# Indirect Threat Patterns
-# =========================
-indirect_patterns = [
-    "you will regret",
-    "you'll regret",
-    "you will pay",
-    "you'll pay",
-    "this won't end well",
-    "this wont end well"
-]
-
-# =========================
-# Threat Keywords
-# =========================
-danger_words = [
-    "kill",
-    "murder",
-    "attack",
-    "destroy",
-    "bomb",
-    "shoot",
-    "die",
-    "stab",
-    "slaughter",
-    "rape",
-    "burn",
-    "terror",
-    "explode"
-]
-
-# =========================
+# =========================================
 # Load Abuse Words
-# =========================
+# =========================================
 def load_abuse_words():
 
     with open(
@@ -136,31 +61,110 @@ def load_abuse_words():
 
 abuse_words = load_abuse_words()
 
-# =========================
+# =========================================
+# Safe Context
+# =========================================
+safe_context = [
+    "game",
+    "match",
+    "pubg",
+    "free fire",
+    "cricket",
+    "football",
+    "chess",
+    "play",
+    "tournament",
+    "gaming",
+    "battle",
+    "competition",
+    "score"
+]
+
+# =========================================
+# Safe Tone
+# =========================================
+safe_tone = [
+    "😂",
+    "🤣",
+    "lol",
+    "haha",
+    "hehe",
+    "jk",
+    "❤️",
+    "🎉"
+]
+
+# =========================================
+# Aggressive Emojis
+# =========================================
+aggressive_emojis = [
+    "💀",
+    "🔪",
+    "😡",
+    "🤬",
+    "☠️",
+    "💣",
+    "🔥",
+    "👿"
+]
+
+# =========================================
+# Indirect Threat Patterns
+# =========================================
+indirect_patterns = [
+    "you will regret",
+    "you'll regret",
+    "you will pay",
+    "you'll pay",
+    "this won't end well",
+    "this wont end well"
+]
+
+# =========================================
+# Threat Keywords
+# =========================================
+danger_words = [
+    "kill",
+    "murder",
+    "attack",
+    "destroy",
+    "bomb",
+    "shoot",
+    "die",
+    "stab",
+    "slaughter",
+    "rape",
+    "burn",
+    "terror",
+    "explode"
+]
+
+# =========================================
+# Translator
+# =========================================
+translator = GoogleTranslator(
+    source='auto',
+    target='en'
+)
+
+# =========================================
 # Language Detection
-# =========================
+# =========================================
 def is_english(text):
 
     try:
-
         return detect(text) == "en"
 
     except:
-
         return True
 
-# =========================
+# =========================================
 # Translation
-# =========================
+# =========================================
 def translate_to_english(text):
 
     try:
-
-        translated = GoogleTranslator(
-            source='auto',
-            target='en'
-        ).translate(text)
-
+        translated = translator.translate(text)
         return translated.lower()
 
     except Exception as e:
@@ -169,9 +173,9 @@ def translate_to_english(text):
 
         return text.lower()
 
-# =========================
-# Helpers
-# =========================
+# =========================================
+# Abuse Detection
+# =========================================
 def contains_abuse(text):
 
     words = re.findall(
@@ -184,9 +188,9 @@ def contains_abuse(text):
         for word in words
     )
 
-# =========================
+# =========================================
 # Fuzzy Abuse Detection
-# =========================
+# =========================================
 def fuzzy_abuse_check(
     text,
     threshold=85
@@ -201,18 +205,14 @@ def fuzzy_abuse_check(
 
         for abuse in abuse_words:
 
-            if (
-                fuzz.ratio(word, abuse)
-                >= threshold
-            ):
-
+            if fuzz.ratio(word, abuse) >= threshold:
                 return True
 
     return False
 
-# =========================
-# Safe Context
-# =========================
+# =========================================
+# Context Rules
+# =========================================
 def is_safe_context(text):
 
     return any(
@@ -220,9 +220,6 @@ def is_safe_context(text):
         for word in safe_context
     )
 
-# =========================
-# Safe Tone
-# =========================
 def is_safe_tone(text):
 
     return any(
@@ -230,9 +227,6 @@ def is_safe_tone(text):
         for word in safe_tone
     )
 
-# =========================
-# Aggressive Emojis
-# =========================
 def contains_aggressive_emoji(text):
 
     return any(
@@ -240,9 +234,6 @@ def contains_aggressive_emoji(text):
         for emoji in aggressive_emojis
     )
 
-# =========================
-# Indirect Threat
-# =========================
 def is_indirect_threat(text):
 
     return any(
@@ -250,84 +241,18 @@ def is_indirect_threat(text):
         for pattern in indirect_patterns
     )
 
-# =========================
-# Explicit Threat
-# =========================
-def is_explicit_threat(text):
-
-    lower = text.lower()
-
-    return (
-
-        "i will" in lower
-
-        and
-
-        any(
-            word in lower
-            for word in [
-                "kill",
-                "destroy",
-                "beat",
-                "shoot",
-                "stab"
-            ]
-        )
-
-    )
-
-# =========================
-# Danger Words
-# =========================
 def contains_danger_word(text):
 
-    lower = text.lower()
-
     return any(
-        word in lower
+        word in text.lower()
         for word in danger_words
     )
 
-# =========================
-# Severity Score
-# =========================
-def severity_score(text):
-
-    score = 0
-
-    lower = text.lower()
-
-    if "kill" in lower:
-        score += 3
-
-    if "destroy" in lower:
-        score += 3
-
-    if "bomb" in lower:
-        score += 3
-
-    if "shoot" in lower:
-        score += 3
-
-    if "fuck" in lower:
-        score += 2
-
-    if "i will" in lower:
-        score += 2
-
-    if contains_aggressive_emoji(lower):
-        score += 2
-
-    return score
-
-# =========================
+# =========================================
 # Load Model
-# =========================
+# =========================================
 tokenizer = None
-
 model = None
-
-torch.set_num_threads(1)
 
 def load_model():
 
@@ -336,7 +261,7 @@ def load_model():
 
     if tokenizer is None or model is None:
 
-        print("Loading lightweight model...")
+        print("Loading model...")
 
         tokenizer = BertTokenizer.from_pretrained(
             "rakeshkrd/bert-threat-detection"
@@ -344,7 +269,6 @@ def load_model():
 
         model = BertForSequenceClassification.from_pretrained(
             "rakeshkrd/bert-threat-detection",
-            torch_dtype=torch.float16,
             low_cpu_mem_usage=True
         )
 
@@ -352,20 +276,19 @@ def load_model():
 
         print("Model loaded.")
 
-
-
-# =========================
+# =========================================
 # Input Schema
-# =========================
+# =========================================
 class InputText(BaseModel):
     text: str
 
-# =========================
-
+# =========================================
 # Prediction Function
-# =========================
+# =========================================
 def predict_model(text):
+
     load_model()
+
     inputs = tokenizer(
         text,
         return_tensors="pt",
@@ -395,35 +318,79 @@ def predict_model(text):
 
     return pred, threat_prob
 
-# =========================
-# API Endpoint
-# =========================
+# =========================================
+# Predict API
+# =========================================
 @app.post("/predict")
 async def predict(data: InputText):
 
     try:
 
-        original_text = data.text
+        original_text = data.text.strip()
 
+        if len(original_text) < 2:
+
+            return {
+                "prediction": "Normal",
+                "confidence": 0.99,
+                "severity": "Low",
+                "reason": "Empty or invalid text"
+            }
+
+        # =====================================
         # Translation
+        # =====================================
         if is_english(original_text):
+
             text = original_text.lower()
+
         else:
-            text = translate_to_english(original_text)
 
-        print("Translated:", text)
+            text = translate_to_english(
+                original_text
+            )
 
+        print("Processed:", text)
+
+        # =====================================
         # Safe Context
+        # =====================================
         if is_safe_context(text):
 
             return {
                 "prediction": "Normal",
                 "confidence": 0.95,
                 "severity": "Low",
-                "reason": "Detected gaming/sports context"
+                "reason": "Gaming/Sports context detected"
             }
 
+        # =====================================
+        # Safe Tone
+        # =====================================
+        if is_safe_tone(text):
+
+            return {
+                "prediction": "Normal",
+                "confidence": 0.90,
+                "severity": "Low",
+                "reason": "Joking tone detected"
+            }
+
+        # =====================================
+        # Emoji Aggression
+        # =====================================
+        if contains_aggressive_emoji(text):
+
+            return {
+                "prediction": "Toxic",
+                "confidence": 0.90,
+                "severity": "Medium",
+                "reason": "Aggressive emoji detected"
+            }
+
+        # =====================================
         # Abuse Detection
+        # =====================================
         if (
             contains_abuse(text)
             or fuzzy_abuse_check(text)
@@ -436,19 +403,44 @@ async def predict(data: InputText):
                 "reason": "Abusive language detected"
             }
 
+        # =====================================
         # Model Prediction
+        # =====================================
         pred, confidence = predict_model(text)
 
-        # Threat
-        if pred == 1:
+        # =====================================
+        # Indirect Threat
+        # =====================================
+        if (
+            is_indirect_threat(text)
+            and confidence > 0.30
+        ):
+
+            return {
+                "prediction": "Threat",
+                "confidence": round(confidence, 3),
+                "severity": "Medium",
+                "reason": "Indirect threat detected"
+            }
+
+        # =====================================
+        # Final Threat
+        # =====================================
+        if (
+            pred == 1
+            and contains_danger_word(text)
+        ):
 
             return {
                 "prediction": "Threat",
                 "confidence": round(confidence, 3),
                 "severity": "High",
-                "reason": "Threat detected"
+                "reason": "Threat intent detected"
             }
 
+        # =====================================
+        # Default Safe
+        # =====================================
         return {
             "prediction": "Normal",
             "confidence": round(confidence, 3),
@@ -463,163 +455,3 @@ async def predict(data: InputText):
         return {
             "error": str(e)
         }
-
-    # =========================
-    # Translation Layer
-    # =========================
-    if is_english(original_text):
-
-        text = original_text.lower()
-
-    else:
-
-        text = translate_to_english(
-            original_text
-        )
-
-    print("Translated:", text)
-
-    # =========================
-    # Safe Context
-    # =========================
-    if is_safe_context(text):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Normal",
-            "confidence": 0.95,
-            "severity": "Low",
-            "source": "context-rule",
-            "reason": "Detected gaming/sports context"
-        }
-
-    # =========================
-    # Safe Tone
-    # =========================
-    if is_safe_tone(text):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Normal",
-            "confidence": 0.90,
-            "severity": "Low",
-            "source": "tone-rule",
-            "reason": "Detected joking tone"
-        }
-
-    # =========================
-    # Explicit Threat
-    # =========================
-    if is_explicit_threat(text):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Threat",
-            "confidence": 0.99,
-            "severity": "High",
-            "source": "rule-based",
-            "reason": "Explicit threat detected"
-        }
-
-    # =========================
-    # Aggressive Emojis
-    # =========================
-    if contains_aggressive_emoji(text):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Toxic",
-            "confidence": 0.90,
-            "severity": "Medium",
-            "source": "emoji-rule",
-            "reason": "Aggressive emojis detected"
-        }
-
-    # =========================
-    # Abuse Detection
-    # =========================
-    if (
-        contains_abuse(text)
-        or
-        fuzzy_abuse_check(text)
-    ):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Abuse",
-            "confidence": 0.90,
-            "severity": "Medium",
-            "source": "rule-abuse",
-            "reason": "Abusive language detected"
-        }
-
-    # =========================
-    # Model Prediction
-    # =========================
-    pred, confidence = predict_model(
-        text
-    )
-
-    # =========================
-    # Indirect Threat
-    # =========================
-    if (
-
-        is_indirect_threat(text)
-
-        and
-
-        confidence > 0.30
-
-    ):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Threat",
-            "confidence": round(confidence, 3),
-            "severity": "Medium",
-            "source": "hybrid-rule",
-            "reason": "Indirect threat detected"
-        }
-
-    # =========================
-    # Final Threat Check
-    # =========================
-    if (
-
-        pred == 1
-
-        and
-
-        contains_danger_word(text)
-
-    ):
-
-        return {
-            "input": original_text,
-            "translated_text": text,
-            "prediction": "Threat",
-            "confidence": round(confidence, 3),
-            "severity": "High",
-            "source": "model",
-            "reason": "Model detected threat intent"
-        }
-
-    # =========================
-    # Default Normal
-    # =========================
-    return {
-        "input": original_text,
-        "translated_text": text,
-        "prediction": "Normal",
-        "confidence": round(confidence, 3),
-        "severity": "Low",
-        "source": "model",
-        "reason": "No harmful intent detected"
-    }
